@@ -221,7 +221,7 @@
         function shapeScore() {
             return (ctx) => {
                 const w = TEX * 0.05, x = TEX / 2 - w / 2;
-                const y = TEX * 0.16, h = TEX * 0.68, r = w / 2;
+                const y = TEX * 0.10, h = TEX * 0.80, r = w / 2;
                 ctx.beginPath();
                 ctx.moveTo(x + r, y);
                 ctx.arcTo(x + w, y, x + w, y + r, r);
@@ -376,7 +376,8 @@
             roughness: 0.72, metalness: 0.0, envMapIntensity: 0.85
         });
         const rimMat = new THREE.MeshStandardMaterial({
-            color: PILL_COLOR, roughness: 0.78, metalness: 0.0, envMapIntensity: 0.9
+            color: PILL_COLOR, roughness: 0.78, metalness: 0.0, envMapIntensity: 0.9,
+            side: THREE.DoubleSide   // keep the edge opaque from every angle
         });
 
         /* ------------------------------------------------------------------ *
