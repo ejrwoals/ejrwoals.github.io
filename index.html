@@ -5,13 +5,460 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>chajjaem's Homepage</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: #f5f2ee;
+            background: #14121a;
+            overflow-x: hidden;
+        }
+
+        /* Fixed 3D stage sitting behind the scrolling content */
+        #stage {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            background:
+                radial-gradient(120% 120% at 50% 15%, #2a2340 0%, #191524 45%, #0e0c14 100%);
+        }
+        #stage canvas { display: block; }
+
+        /* Scroll track: gives the page height to scroll through */
+        main {
+            position: relative;
+            z-index: 1;
+            pointer-events: none; /* let scroll pass through; text is decorative */
+        }
+
+        section {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 0 6vw;
+        }
+
+        .eyebrow {
+            font-size: clamp(0.7rem, 1.4vw, 0.85rem);
+            letter-spacing: 0.42em;
+            text-transform: uppercase;
+            color: #d8956e;
+            margin-bottom: 1.1rem;
+            opacity: 0.9;
+        }
+
+        h1 {
+            font-size: clamp(2.4rem, 7vw, 5.2rem);
+            font-weight: 800;
+            line-height: 1.02;
+            letter-spacing: -0.02em;
+            text-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        h2 {
+            font-size: clamp(1.5rem, 4.5vw, 3rem);
+            font-weight: 700;
+            letter-spacing: -0.01em;
+        }
+
+        p.lead {
+            margin-top: 1.2rem;
+            max-width: 30ch;
+            font-size: clamp(0.95rem, 2vw, 1.15rem);
+            line-height: 1.6;
+            color: #b8b2c4;
+        }
+
+        /* First section keeps the pill centered & unobstructed */
+        .hero { justify-content: flex-start; padding-top: 8vh; }
+        .hero .spacer { flex: 1; }
+
+        .scroll-hint {
+            position: fixed;
+            left: 50%;
+            bottom: 26px;
+            transform: translateX(-50%);
+            z-index: 2;
+            font-size: 0.72rem;
+            letter-spacing: 0.35em;
+            text-transform: uppercase;
+            color: #cfc9db;
+            opacity: 0.75;
+            pointer-events: none;
+            transition: opacity 0.4s ease;
+        }
+        .scroll-hint::after {
+            content: "";
+            display: block;
+            width: 1px;
+            height: 34px;
+            margin: 10px auto 0;
+            background: linear-gradient(to bottom, #d8956e, transparent);
+            animation: pulse 1.8s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 0.2; transform: scaleY(0.6); }
+            50%      { opacity: 1;   transform: scaleY(1); }
+        }
+
+        /* Loading veil */
+        #loader {
+            position: fixed;
+            inset: 0;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #14121a;
+            color: #d8956e;
+            letter-spacing: 0.3em;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            transition: opacity 0.8s ease;
+        }
+        #loader.hidden { opacity: 0; pointer-events: none; }
+    </style>
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js"
+      }
+    }
+    </script>
 </head>
 
 <body>
-    <div class="flex items-center justify-center min-h-screen">
-        <h1 class="text-4xl font-bold text-gray-900">chajjaem's Homepage</h1>
-    </div>
+    <div id="loader">loading…</div>
+    <div id="stage"></div>
+
+    <main>
+        <section class="hero">
+            <div class="spacer"></div>
+            <div class="eyebrow">welcome</div>
+            <h1>chajjaem's&nbsp;Homepage</h1>
+            <p class="lead">스크롤을 내려 알약을 돌려보세요.</p>
+        </section>
+        <section>
+            <div class="eyebrow">crafted in code</div>
+            <h2>에셋 없이, 순수하게 코드로.</h2>
+            <p class="lead">질감도 · 분할선도 · 음각 글씨도 실시간으로 그려집니다.</p>
+        </section>
+        <section>
+            <div class="eyebrow">keep scrolling</div>
+            <h2>돌 때마다, 새로운 인사.</h2>
+            <p class="lead">앞면이 다시 돌아올 때마다 글씨가 바뀝니다.</p>
+        </section>
+        <section>
+            <div class="eyebrow">the end &amp; the start</div>
+            <h2>반가워요 :)</h2>
+            <p class="lead">chajjaem's Homepage에 오신 걸 환영합니다.</p>
+        </section>
+    </main>
+
+    <div class="scroll-hint" id="scrollHint">scroll</div>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        /* ------------------------------------------------------------------ *
+         *  Config
+         * ------------------------------------------------------------------ */
+        const PILL_COLOR   = '#e8825a';   // salmon/orange body
+        const R            = 1.3;         // pill radius
+        const THICKNESS    = 0.3;         // pill thickness  (~1/8 of diameter)
+        const SPINS        = 3;           // full rotations across the whole page
+        const TEX          = 1024;        // texture resolution
+
+        // Phrases that cycle on the front face, one per full turn.
+        const PHRASES = [
+            "chajjaem's\nHomepage",
+            "Nice to\nmeet you",
+            "Enjoy\nyour stay",
+            "Thanks for\nscrolling"
+        ];
+
+        /* ------------------------------------------------------------------ *
+         *  Texture painting  (color map + bump map, engraved look)
+         * ------------------------------------------------------------------ */
+        function newCanvas() {
+            const c = document.createElement('canvas');
+            c.width = c.height = TEX;
+            return c;
+        }
+
+        // Paint the matte pill surface + fine speckle grain onto color & bump.
+        function paintBase(cctx, bctx) {
+            cctx.fillStyle = PILL_COLOR;
+            cctx.fillRect(0, 0, TEX, TEX);
+            bctx.fillStyle = '#bcbcbc';        // mid height = flat surface
+            bctx.fillRect(0, 0, TEX, TEX);
+
+            // speckle: thousands of faint dots for a real tablet's matte grain
+            for (let i = 0; i < 9000; i++) {
+                const x = Math.random() * TEX;
+                const y = Math.random() * TEX;
+                const s = Math.random() * 2 + 0.5;
+                const d = Math.random() < 0.5;
+                cctx.fillStyle = d ? 'rgba(120,50,30,0.06)' : 'rgba(255,220,190,0.06)';
+                cctx.fillRect(x, y, s, s);
+                bctx.fillStyle = d ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.05)';
+                bctx.fillRect(x, y, s, s);
+            }
+        }
+
+        // Draw an engraved shape: a bright lower lip + dark recess on the color
+        // map (fakes the light catching a V-groove) and a dark groove on bump.
+        function engrave(cctx, bctx, drawShape) {
+            // highlight (light hits the far wall of the groove) — offset down-right
+            cctx.save();
+            cctx.translate(3, 4);
+            cctx.fillStyle = 'rgba(255,225,200,0.55)';
+            cctx.strokeStyle = 'rgba(255,225,200,0.55)';
+            drawShape(cctx);
+            cctx.restore();
+
+            // recess shadow — the groove itself, offset up-left
+            cctx.save();
+            cctx.translate(-1, -1);
+            cctx.fillStyle = 'rgba(120,45,25,0.85)';
+            cctx.strokeStyle = 'rgba(120,45,25,0.85)';
+            drawShape(cctx);
+            cctx.restore();
+
+            // bump: recessed = dark, slightly blurred for a soft groove wall
+            bctx.save();
+            bctx.filter = 'blur(2px)';
+            bctx.fillStyle = '#3a3a3a';
+            bctx.strokeStyle = '#3a3a3a';
+            drawShape(bctx);
+            bctx.restore();
+        }
+
+        // Fit a font size so the widest line stays within maxW.
+        function fitFont(ctx, lines, maxW, startPx) {
+            let px = startPx;
+            for (;;) {
+                ctx.font = `800 ${px}px Helvetica, Arial, sans-serif`;
+                const wide = Math.max(...lines.map(l => ctx.measureText(l).width));
+                if (wide <= maxW || px <= 60) return px;
+                px -= 6;
+            }
+        }
+
+        function shapeText(text) {
+            const lines = text.split('\n');
+            return (ctx) => {
+                const px = fitFont(ctx, lines, TEX * 0.62, 190);
+                ctx.font = `800 ${px}px Helvetica, Arial, sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const lh = px * 1.12;
+                const total = lh * (lines.length - 1);
+                lines.forEach((l, i) => {
+                    ctx.fillText(l, TEX / 2, TEX / 2 - total / 2 + i * lh);
+                });
+            };
+        }
+
+        function shapeScore() {
+            // a vertical divider groove down the middle of the tablet
+            return (ctx) => {
+                const w = TEX * 0.05;
+                const x = TEX / 2 - w / 2;
+                const y = TEX * 0.16;
+                const h = TEX * 0.68;
+                const r = w / 2;
+                ctx.beginPath();
+                ctx.moveTo(x + r, y);
+                ctx.arcTo(x + w, y, x + w, y + r, r);
+                ctx.lineTo(x + w, y + h - r);
+                ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+                ctx.lineTo(x + r, y + h);
+                ctx.arcTo(x, y + h, x, y + h - r, r);
+                ctx.lineTo(x, y + r);
+                ctx.arcTo(x, y, x + r, y, r);
+                ctx.closePath();
+                ctx.fill();
+            };
+        }
+
+        // Build a { map, bump } material-texture pair from a shape function.
+        function makeFace(shapeFn) {
+            const colorC = newCanvas(), bumpC = newCanvas();
+            const cctx = colorC.getContext('2d'), bctx = bumpC.getContext('2d');
+            paintBase(cctx, bctx);
+            engrave(cctx, bctx, shapeFn);
+
+            const map = new THREE.CanvasTexture(colorC);
+            map.colorSpace = THREE.SRGBColorSpace;
+            const bump = new THREE.CanvasTexture(bumpC);
+            return { colorC, bumpC, cctx, bctx, map, bump };
+        }
+
+        // Repaint an existing face with new text (used for the phrase swap).
+        function repaintText(face, text) {
+            paintBase(face.cctx, face.bctx);
+            engrave(face.cctx, face.bctx, shapeText(text));
+            face.map.needsUpdate = true;
+            face.bump.needsUpdate = true;
+        }
+
+        /* ------------------------------------------------------------------ *
+         *  Scene
+         * ------------------------------------------------------------------ */
+        const stage = document.getElementById('stage');
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.05;
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
+        stage.appendChild(renderer.domElement);
+
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(0, 0, 5);
+
+        // Lights: soft ambient + a warm key + a cool rim to make grooves pop.
+        scene.add(new THREE.HemisphereLight(0xffffff, 0x2a2438, 0.75));
+        const key = new THREE.DirectionalLight(0xfff2e8, 1.35);
+        key.position.set(-2.2, 3, 3);
+        scene.add(key);
+        const rim = new THREE.DirectionalLight(0x9fb4ff, 0.6);
+        rim.position.set(2.5, -1, -2);
+        scene.add(rim);
+        const fill = new THREE.PointLight(0xffd9c0, 0.5, 20);
+        fill.position.set(3, 1, 4);
+        scene.add(fill);
+
+        const maxAniso = renderer.capabilities.getMaxAnisotropy();
+
+        const frontFace = makeFace(shapeText(PHRASES[0]));
+        const backFace  = makeFace(shapeScore());
+        [frontFace, backFace].forEach(f => {
+            f.map.anisotropy = maxAniso;
+            f.bump.anisotropy = maxAniso;
+        });
+
+        const bumpScale = 0.035;
+        const frontMat = new THREE.MeshStandardMaterial({
+            map: frontFace.map, bumpMap: frontFace.bump, bumpScale,
+            roughness: 0.82, metalness: 0.0
+        });
+        const backMat = new THREE.MeshStandardMaterial({
+            map: backFace.map, bumpMap: backFace.bump, bumpScale,
+            roughness: 0.82, metalness: 0.0
+        });
+        const rimMat = new THREE.MeshStandardMaterial({
+            color: PILL_COLOR, roughness: 0.85, metalness: 0.0
+        });
+
+        // Pill = open cylinder rim + two textured disc caps.
+        const pill = new THREE.Group();
+
+        const rimMesh = new THREE.Mesh(
+            new THREE.CylinderGeometry(R, R, THICKNESS, 96, 1, true),
+            rimMat
+        );
+        rimMesh.rotation.x = Math.PI / 2;   // axis Y -> Z, so caps face the camera
+        pill.add(rimMesh);
+
+        const frontDisc = new THREE.Mesh(new THREE.CircleGeometry(R, 96), frontMat);
+        frontDisc.position.z = THICKNESS / 2;
+        pill.add(frontDisc);
+
+        const backDisc = new THREE.Mesh(new THREE.CircleGeometry(R, 96), backMat);
+        backDisc.position.z = -THICKNESS / 2;
+        backDisc.rotation.y = Math.PI;      // face outward (-Z)
+        pill.add(backDisc);
+
+        scene.add(pill);
+
+        /* ------------------------------------------------------------------ *
+         *  Scroll-driven animation
+         * ------------------------------------------------------------------ */
+        const TWO_PI = Math.PI * 2;
+        let targetRot = 0;
+        let currentRot = 0;
+        let targetScale = 1;
+        let currentScale = 1;
+        let camTargetY = 0, camCurY = 0;
+        let lastHalf = 0;
+
+        function scrollProgress() {
+            const max = document.body.scrollHeight - window.innerHeight;
+            return max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
+        }
+
+        function onScroll() {
+            const p = scrollProgress();
+            targetRot = p * TWO_PI * SPINS;
+
+            // camera work: gentle dolly-in + a breathing zoom on the pill
+            targetScale = 1 + 0.18 * Math.sin(p * Math.PI * SPINS) + p * 0.12;
+            camTargetY = Math.sin(p * Math.PI * 2) * 0.25;
+
+            // Phrase swap: when the pill passes edge-on, if the FRONT (text) face
+            // is the one about to reappear, repaint it with the next phrase.
+            const half = Math.round(targetRot / Math.PI);
+            if (half !== lastHalf) {
+                const facingFront = (((half % 2) + 2) % 2) === 0;
+                if (facingFront) {
+                    const idx = Math.floor(half / 2) % PHRASES.length;
+                    repaintText(frontFace, PHRASES[((idx % PHRASES.length) + PHRASES.length) % PHRASES.length]);
+                }
+                lastHalf = half;
+            }
+
+            document.getElementById('scrollHint').style.opacity = p > 0.02 ? '0' : '0.75';
+        }
+        window.addEventListener('scroll', onScroll, { passive: true });
+
+        function onResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        window.addEventListener('resize', onResize);
+
+        /* ------------------------------------------------------------------ *
+         *  Render loop
+         * ------------------------------------------------------------------ */
+        const clock = new THREE.Clock();
+        function tick() {
+            const t = clock.getElapsedTime();
+
+            // smooth (eased) follow of scroll targets for a buttery feel
+            currentRot   += (targetRot   - currentRot)   * 0.08;
+            currentScale += (targetScale - currentScale) * 0.08;
+            camCurY      += (camTargetY  - camCurY)      * 0.08;
+
+            pill.rotation.y = currentRot;
+            pill.rotation.x = Math.sin(t * 0.6) * 0.06;   // subtle idle float
+            pill.position.y = Math.sin(t * 0.9) * 0.04;
+            pill.scale.setScalar(currentScale);
+
+            camera.position.y = camCurY;
+            camera.lookAt(0, 0, 0);
+
+            renderer.render(scene, camera);
+            requestAnimationFrame(tick);
+        }
+
+        onScroll();
+        tick();
+
+        // reveal
+        requestAnimationFrame(() => {
+            setTimeout(() => document.getElementById('loader').classList.add('hidden'), 250);
+        });
+    </script>
 </body>
 
 </html>
