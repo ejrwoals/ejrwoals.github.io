@@ -219,8 +219,9 @@
         }
 
         function shapeScore() {
-            return (ctx) => {
-                const w = TEX * 0.05, x = TEX / 2 - w / 2;
+            // A rounded vertical bar whose width is a fraction of the full groove.
+            const bar = (ctx, wFrac) => {
+                const w = TEX * 0.055 * wFrac, x = TEX / 2 - w / 2;
                 const y = TEX * 0.10, h = TEX * 0.80, r = w / 2;
                 ctx.beginPath();
                 ctx.moveTo(x + r, y);
@@ -233,6 +234,23 @@
                 ctx.arcTo(x, y, x + r, y, r);
                 ctx.closePath();
                 ctx.fill();
+            };
+            return (ctx, mode) => {
+                if (mode === 'height') {
+                    // Carve real depth: darkest (deepest) toward the centre, both
+                    // along the length and across the width (a V/U cross-section).
+                    const top = TEX * 0.10, bot = TEX * 0.90;
+                    const grad = (a, b) => {
+                        const g = ctx.createLinearGradient(0, top, 0, bot);
+                        g.addColorStop(0.0, a); g.addColorStop(0.5, b); g.addColorStop(1.0, a);
+                        return g;
+                    };
+                    ctx.fillStyle = grad('#5e5e5e', '#141414'); bar(ctx, 1.0);  // outer, shallow lip
+                    ctx.fillStyle = grad('#343434', '#050505'); bar(ctx, 0.6);  // mid
+                    ctx.fillStyle = grad('#1a1a1a', '#000000'); bar(ctx, 0.28); // deepest core
+                } else {
+                    bar(ctx, 1.0);   // colour AO uses the caller's fill
+                }
             };
         }
 
@@ -265,7 +283,7 @@
             ctx.save();
             ctx.filter = 'blur(2px)';
             ctx.fillStyle = 'rgba(120,50,28,0.35)';
-            shapeFn(ctx);
+            shapeFn(ctx, 'color');
             ctx.restore();
             return c;
         }
@@ -284,7 +302,7 @@
             ctx.save();
             ctx.filter = 'blur(2.5px)';
             ctx.fillStyle = '#141414';
-            shapeFn(ctx);
+            shapeFn(ctx, 'height');
             ctx.restore();
             return c;
         }
@@ -324,6 +342,33 @@
             const map = new THREE.CanvasTexture(paintColor(shapeFn, grain));
             map.colorSpace = THREE.SRGBColorSpace;
             const normal = toNormalTexture(paintHeight(shapeFn, grain));
+            return { map, normal };
+        }
+
+        // Tiling grain (no grooves) for the rounded edge, so the rim shares the
+        // same matte tooth as the faces instead of being a flat solid colour.
+        function buildGrain() {
+            const grain = speckle(22000);
+            const cc = newCanvas(), cx = cc.getContext('2d');
+            cx.fillStyle = `#${PILL_COLOR.getHexString()}`;
+            cx.fillRect(0, 0, TEX, TEX);
+            const hc = newCanvas(), hx = hc.getContext('2d');
+            hx.fillStyle = '#8c8c8c';
+            hx.fillRect(0, 0, TEX, TEX);
+            for (const [x, y, s, d] of grain) {
+                cx.fillStyle = d < 0 ? 'rgba(120,52,30,0.06)' : 'rgba(255,222,196,0.06)';
+                cx.fillRect(x, y, s, s);
+                const v = 140 + d * 60;
+                hx.fillStyle = `rgb(${v},${v},${v})`;
+                hx.fillRect(x, y, s, s);
+            }
+            const map = new THREE.CanvasTexture(cc);
+            map.colorSpace = THREE.SRGBColorSpace;
+            const normal = toNormalTexture(hc);
+            [map, normal].forEach(t => {
+                t.wrapS = t.wrapT = THREE.RepeatWrapping;
+                t.repeat.set(9, 2);
+            });
             return { map, normal };
         }
 
@@ -375,8 +420,13 @@
             map: backFaceTex.map, normalMap: backFaceTex.normal, normalScale: NS,
             roughness: 0.72, metalness: 0.0, envMapIntensity: 0.85
         });
+        const rimGrain = buildGrain();
+        rimGrain.map.anisotropy = maxAniso;
+        rimGrain.normal.anisotropy = maxAniso;
         const rimMat = new THREE.MeshStandardMaterial({
-            color: PILL_COLOR, roughness: 0.78, metalness: 0.0, envMapIntensity: 0.9,
+            map: rimGrain.map, normalMap: rimGrain.normal,
+            normalScale: new THREE.Vector2(0.5, 0.5),
+            roughness: 0.8, metalness: 0.0, envMapIntensity: 0.9,
             side: THREE.DoubleSide   // keep the edge opaque from every angle
         });
 
