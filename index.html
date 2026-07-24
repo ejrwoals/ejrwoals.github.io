@@ -203,18 +203,40 @@
             }
         }
 
-        // Returns a draw(ctx) that stamps the engraved *shape* (text) in the
-        // current fill colour — geometry only, no shading baked in.
+        // Lay the text out on a context and return a draw(ctx) for it.
+        function layoutText(ctx, lines) {
+            const px = fitFont(ctx, lines, TEX * 0.62, 190);
+            ctx.font = `800 ${px}px Helvetica, Arial, sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            const lh = px * 1.12, total = lh * (lines.length - 1);
+            return (c) => lines.forEach((l, i) =>
+                c.fillText(l, TEX / 2, TEX / 2 - total / 2 + i * lh));
+        }
+
         function shapeText(text) {
             const lines = text.split('\n');
-            return (ctx) => {
-                const px = fitFont(ctx, lines, TEX * 0.62, 190);
-                ctx.font = `800 ${px}px Helvetica, Arial, sans-serif`;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                const lh = px * 1.12;
-                const total = lh * (lines.length - 1);
-                lines.forEach((l, i) => ctx.fillText(l, TEX / 2, TEX / 2 - total / 2 + i * lh));
+            return (ctx, mode) => {
+                if (mode === 'height') {
+                    // Graded groove: a blurred glyph mask makes each stroke deeper
+                    // at its centre and shallower toward its walls (U cross-section).
+                    const mask = newCanvas(), mx = mask.getContext('2d');
+                    mx.fillStyle = '#fff';
+                    layoutText(mx, lines)(mx);         // solid white glyphs
+                    const blur = newCanvas(), bx = blur.getContext('2d');
+                    bx.filter = 'blur(7px)';           // soft walls; centres stay solid
+                    bx.drawImage(mask, 0, 0);
+                    bx.filter = 'none';
+                    bx.globalCompositeOperation = 'source-in';
+                    bx.fillStyle = '#000';             // recolor to black, keep alpha
+                    bx.fillRect(0, 0, TEX, TEX);
+                    ctx.save();
+                    ctx.filter = 'none';
+                    ctx.drawImage(blur, 0, 0);         // dark = deep, centre-weighted
+                    ctx.restore();
+                } else {
+                    layoutText(ctx, lines)(ctx);       // colour AO: uniform fill
+                }
             };
         }
 
