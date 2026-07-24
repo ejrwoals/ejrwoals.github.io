@@ -17,21 +17,19 @@
             overflow-x: hidden;
         }
 
-        /* Fixed 3D stage sitting behind the scrolling content */
         #stage {
             position: fixed;
             inset: 0;
             z-index: 0;
             background:
-                radial-gradient(120% 120% at 50% 15%, #2a2340 0%, #191524 45%, #0e0c14 100%);
+                radial-gradient(120% 120% at 50% 12%, #2b2440 0%, #191524 46%, #0d0b12 100%);
         }
         #stage canvas { display: block; }
 
-        /* Scroll track: gives the page height to scroll through */
         main {
             position: relative;
             z-index: 1;
-            pointer-events: none; /* let scroll pass through; text is decorative */
+            pointer-events: none;
         }
 
         section {
@@ -48,7 +46,7 @@
             font-size: clamp(0.7rem, 1.4vw, 0.85rem);
             letter-spacing: 0.42em;
             text-transform: uppercase;
-            color: #d8956e;
+            color: #e0a07d;
             margin-bottom: 1.1rem;
             opacity: 0.9;
         }
@@ -75,7 +73,6 @@
             color: #b8b2c4;
         }
 
-        /* First section keeps the pill centered & unobstructed */
         .hero { justify-content: flex-start; padding-top: 8vh; }
         .hero .spacer { flex: 1; }
 
@@ -99,7 +96,7 @@
             width: 1px;
             height: 34px;
             margin: 10px auto 0;
-            background: linear-gradient(to bottom, #d8956e, transparent);
+            background: linear-gradient(to bottom, #e0a07d, transparent);
             animation: pulse 1.8s ease-in-out infinite;
         }
         @keyframes pulse {
@@ -107,7 +104,6 @@
             50%      { opacity: 1;   transform: scaleY(1); }
         }
 
-        /* Loading veil */
         #loader {
             position: fixed;
             inset: 0;
@@ -116,7 +112,7 @@
             align-items: center;
             justify-content: center;
             background: #14121a;
-            color: #d8956e;
+            color: #e0a07d;
             letter-spacing: 0.3em;
             font-size: 0.8rem;
             text-transform: uppercase;
@@ -127,7 +123,8 @@
     <script type="importmap">
     {
       "imports": {
-        "three": "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js"
+        "three": "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/"
       }
     }
     </script>
@@ -147,7 +144,7 @@
         <section>
             <div class="eyebrow">crafted in code</div>
             <h2>에셋 없이, 순수하게 코드로.</h2>
-            <p class="lead">질감도 · 분할선도 · 음각 글씨도 실시간으로 그려집니다.</p>
+            <p class="lead">질감도 · 분할선도 · 음각 글씨도 실시간으로 조명에 반응합니다.</p>
         </section>
         <section>
             <div class="eyebrow">keep scrolling</div>
@@ -165,17 +162,20 @@
 
     <script type="module">
         import * as THREE from 'three';
+        import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
         /* ------------------------------------------------------------------ *
          *  Config
          * ------------------------------------------------------------------ */
-        const PILL_COLOR   = '#e8825a';   // salmon/orange body
-        const R            = 1.3;         // pill radius
-        const THICKNESS    = 0.3;         // pill thickness  (~1/8 of diameter)
-        const SPINS        = 3;           // full rotations across the whole page
-        const TEX          = 1024;        // texture resolution
+        const PILL_COLOR = new THREE.Color('#e88a63');  // salmon/orange body
+        const R          = 1.3;      // outer radius
+        const THICKNESS  = 0.32;     // pill thickness
+        const BEVEL      = THICKNESS / 2;         // semicircular edge radius
+        const RFACE      = R - BEVEL;             // flat-face radius
+        const SPINS      = 3;        // full rotations across the whole page
+        const TEX        = 1024;     // texture resolution
+        const NORMAL_STRENGTH = 2.4; // how hard grooves/grain bend the surface normal
 
-        // Phrases that cycle on the front face, one per full turn.
         const PHRASES = [
             "chajjaem's\nHomepage",
             "Nice to\nmeet you",
@@ -184,60 +184,12 @@
         ];
 
         /* ------------------------------------------------------------------ *
-         *  Texture painting  (color map + bump map, engraved look)
+         *  Canvas helpers
          * ------------------------------------------------------------------ */
         function newCanvas() {
             const c = document.createElement('canvas');
             c.width = c.height = TEX;
             return c;
-        }
-
-        // Paint the matte pill surface + fine speckle grain onto color & bump.
-        function paintBase(cctx, bctx) {
-            cctx.fillStyle = PILL_COLOR;
-            cctx.fillRect(0, 0, TEX, TEX);
-            bctx.fillStyle = '#bcbcbc';        // mid height = flat surface
-            bctx.fillRect(0, 0, TEX, TEX);
-
-            // speckle: thousands of faint dots for a real tablet's matte grain
-            for (let i = 0; i < 9000; i++) {
-                const x = Math.random() * TEX;
-                const y = Math.random() * TEX;
-                const s = Math.random() * 2 + 0.5;
-                const d = Math.random() < 0.5;
-                cctx.fillStyle = d ? 'rgba(120,50,30,0.06)' : 'rgba(255,220,190,0.06)';
-                cctx.fillRect(x, y, s, s);
-                bctx.fillStyle = d ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.05)';
-                bctx.fillRect(x, y, s, s);
-            }
-        }
-
-        // Draw an engraved shape: a bright lower lip + dark recess on the color
-        // map (fakes the light catching a V-groove) and a dark groove on bump.
-        function engrave(cctx, bctx, drawShape) {
-            // highlight (light hits the far wall of the groove) — offset down-right
-            cctx.save();
-            cctx.translate(3, 4);
-            cctx.fillStyle = 'rgba(255,225,200,0.55)';
-            cctx.strokeStyle = 'rgba(255,225,200,0.55)';
-            drawShape(cctx);
-            cctx.restore();
-
-            // recess shadow — the groove itself, offset up-left
-            cctx.save();
-            cctx.translate(-1, -1);
-            cctx.fillStyle = 'rgba(120,45,25,0.85)';
-            cctx.strokeStyle = 'rgba(120,45,25,0.85)';
-            drawShape(cctx);
-            cctx.restore();
-
-            // bump: recessed = dark, slightly blurred for a soft groove wall
-            bctx.save();
-            bctx.filter = 'blur(2px)';
-            bctx.fillStyle = '#3a3a3a';
-            bctx.strokeStyle = '#3a3a3a';
-            drawShape(bctx);
-            bctx.restore();
         }
 
         // Fit a font size so the widest line stays within maxW.
@@ -251,6 +203,8 @@
             }
         }
 
+        // Returns a draw(ctx) that stamps the engraved *shape* (text) in the
+        // current fill colour — geometry only, no shading baked in.
         function shapeText(text) {
             const lines = text.split('\n');
             return (ctx) => {
@@ -260,20 +214,14 @@
                 ctx.textBaseline = 'middle';
                 const lh = px * 1.12;
                 const total = lh * (lines.length - 1);
-                lines.forEach((l, i) => {
-                    ctx.fillText(l, TEX / 2, TEX / 2 - total / 2 + i * lh);
-                });
+                lines.forEach((l, i) => ctx.fillText(l, TEX / 2, TEX / 2 - total / 2 + i * lh));
             };
         }
 
         function shapeScore() {
-            // a vertical divider groove down the middle of the tablet
             return (ctx) => {
-                const w = TEX * 0.05;
-                const x = TEX / 2 - w / 2;
-                const y = TEX * 0.16;
-                const h = TEX * 0.68;
-                const r = w / 2;
+                const w = TEX * 0.05, x = TEX / 2 - w / 2;
+                const y = TEX * 0.16, h = TEX * 0.68, r = w / 2;
                 ctx.beginPath();
                 ctx.moveTo(x + r, y);
                 ctx.arcTo(x + w, y, x + w, y + r, r);
@@ -288,36 +236,106 @@
             };
         }
 
-        // Build a { map, bump } material-texture pair from a shape function.
-        function makeFace(shapeFn) {
-            const colorC = newCanvas(), bumpC = newCanvas();
-            const cctx = colorC.getContext('2d'), bctx = bumpC.getContext('2d');
-            paintBase(cctx, bctx);
-            engrave(cctx, bctx, shapeFn);
+        /* ------------------------------------------------------------------ *
+         *  Texture generation
+         *  color  : flat orange + fine grain + a little occlusion in grooves
+         *  height : grayscale relief (surface = mid, grooves = low, + grain)
+         *  normal : derived from height so LIGHTING reacts as the pill turns
+         * ------------------------------------------------------------------ */
 
-            const map = new THREE.CanvasTexture(colorC);
-            map.colorSpace = THREE.SRGBColorSpace;
-            const bump = new THREE.CanvasTexture(bumpC);
-            return { colorC, bumpC, cctx, bctx, map, bump };
+        // Shared speckle field so colour & height agree on where grain sits.
+        function speckle(n) {
+            const pts = [];
+            for (let i = 0; i < n; i++) {
+                pts.push([Math.random() * TEX, Math.random() * TEX,
+                          Math.random() * 2 + 0.5, Math.random() < 0.5 ? -1 : 1]);
+            }
+            return pts;
         }
 
-        // Repaint an existing face with new text (used for the phrase swap).
-        function repaintText(face, text) {
-            paintBase(face.cctx, face.bctx);
-            engrave(face.cctx, face.bctx, shapeText(text));
-            face.map.needsUpdate = true;
-            face.bump.needsUpdate = true;
+        function paintColor(shapeFn, grain) {
+            const c = newCanvas(), ctx = c.getContext('2d');
+            ctx.fillStyle = `#${PILL_COLOR.getHexString()}`;
+            ctx.fillRect(0, 0, TEX, TEX);
+            for (const [x, y, s, d] of grain) {
+                ctx.fillStyle = d < 0 ? 'rgba(120,52,30,0.05)' : 'rgba(255,222,196,0.05)';
+                ctx.fillRect(x, y, s, s);
+            }
+            // physically-plausible ambient occlusion: grooves sit a touch darker
+            ctx.save();
+            ctx.filter = 'blur(2px)';
+            ctx.fillStyle = 'rgba(120,50,28,0.35)';
+            shapeFn(ctx);
+            ctx.restore();
+            return c;
+        }
+
+        function paintHeight(shapeFn, grain) {
+            const c = newCanvas(), ctx = c.getContext('2d');
+            ctx.fillStyle = '#8c8c8c';                 // base surface level
+            ctx.fillRect(0, 0, TEX, TEX);
+            // micro-relief: the matte tablet tooth that catches raking light
+            for (const [x, y, s, d] of grain) {
+                const v = 140 + d * 55;
+                ctx.fillStyle = `rgb(${v},${v},${v})`;
+                ctx.fillRect(x, y, s, s);
+            }
+            // grooves: dark = recessed. Blur gives sloped walls -> real normals.
+            ctx.save();
+            ctx.filter = 'blur(2.5px)';
+            ctx.fillStyle = '#141414';
+            shapeFn(ctx);
+            ctx.restore();
+            return c;
+        }
+
+        // Sobel over the height map -> tangent-space normal map.
+        function toNormalTexture(heightCanvas) {
+            const w = heightCanvas.width, h = heightCanvas.height;
+            const src = heightCanvas.getContext('2d').getImageData(0, 0, w, h).data;
+            const out = new ImageData(w, h);
+            const o = out.data;
+            const at = (x, y) => {
+                x = x < 0 ? 0 : x >= w ? w - 1 : x;
+                y = y < 0 ? 0 : y >= h ? h - 1 : y;
+                return src[(y * w + x) * 4] / 255;
+            };
+            for (let y = 0; y < h; y++) {
+                for (let x = 0; x < w; x++) {
+                    const dx = (at(x - 1, y) - at(x + 1, y)) * NORMAL_STRENGTH;
+                    const dy = (at(x, y - 1) - at(x, y + 1)) * NORMAL_STRENGTH;
+                    const len = Math.hypot(dx, dy, 1);
+                    const i = (y * w + x) * 4;
+                    o[i]     = (dx / len * 0.5 + 0.5) * 255;
+                    o[i + 1] = (dy / len * 0.5 + 0.5) * 255;
+                    o[i + 2] = (1  / len * 0.5 + 0.5) * 255;
+                    o[i + 3] = 255;
+                }
+            }
+            const nc = newCanvas();
+            nc.getContext('2d').putImageData(out, 0, 0);
+            const t = new THREE.CanvasTexture(nc);
+            t.colorSpace = THREE.NoColorSpace;
+            return t;
+        }
+
+        function buildFace(shapeFn) {
+            const grain = speckle(14000);
+            const map = new THREE.CanvasTexture(paintColor(shapeFn, grain));
+            map.colorSpace = THREE.SRGBColorSpace;
+            const normal = toNormalTexture(paintHeight(shapeFn, grain));
+            return { map, normal };
         }
 
         /* ------------------------------------------------------------------ *
-         *  Scene
+         *  Renderer / scene
          * ------------------------------------------------------------------ */
         const stage = document.getElementById('stage');
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        renderer.toneMappingExposure = 1.05;
+        renderer.toneMappingExposure = 1.0;
         renderer.outputColorSpace = THREE.SRGBColorSpace;
         stage.appendChild(renderer.domElement);
 
@@ -325,57 +343,65 @@
         const camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 100);
         camera.position.set(0, 0, 5);
 
-        // Lights: soft ambient + a warm key + a cool rim to make grooves pop.
-        scene.add(new THREE.HemisphereLight(0xffffff, 0x2a2438, 0.75));
-        const key = new THREE.DirectionalLight(0xfff2e8, 1.35);
-        key.position.set(-2.2, 3, 3);
+        // Image-based lighting: soft studio env so the matte surface + grooves
+        // pick up gradients that shift as the pill rotates.
+        const pmrem = new THREE.PMREMGenerator(renderer);
+        scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+        // A warm key light gives a defined highlight that travels on rotation.
+        const key = new THREE.DirectionalLight(0xfff0e6, 2.1);
+        key.position.set(-2.4, 3, 2.5);
         scene.add(key);
-        const rim = new THREE.DirectionalLight(0x9fb4ff, 0.6);
-        rim.position.set(2.5, -1, -2);
+        const rim = new THREE.DirectionalLight(0x9fb4ff, 0.8);
+        rim.position.set(2.6, -1.2, -2);
         scene.add(rim);
-        const fill = new THREE.PointLight(0xffd9c0, 0.5, 20);
-        fill.position.set(3, 1, 4);
-        scene.add(fill);
 
         const maxAniso = renderer.capabilities.getMaxAnisotropy();
 
-        const frontFace = makeFace(shapeText(PHRASES[0]));
-        const backFace  = makeFace(shapeScore());
-        [frontFace, backFace].forEach(f => {
+        // Pre-build every face up front so phrase swaps are instant (no hitch).
+        const frontFaces = PHRASES.map(p => buildFace(shapeText(p)));
+        const backFaceTex = buildFace(shapeScore());
+        [...frontFaces, backFaceTex].forEach(f => {
             f.map.anisotropy = maxAniso;
-            f.bump.anisotropy = maxAniso;
+            f.normal.anisotropy = maxAniso;
         });
 
-        const bumpScale = 0.035;
+        const NS = new THREE.Vector2(1.3, 1.3);
         const frontMat = new THREE.MeshStandardMaterial({
-            map: frontFace.map, bumpMap: frontFace.bump, bumpScale,
-            roughness: 0.82, metalness: 0.0
+            map: frontFaces[0].map, normalMap: frontFaces[0].normal, normalScale: NS,
+            roughness: 0.72, metalness: 0.0, envMapIntensity: 0.85
         });
         const backMat = new THREE.MeshStandardMaterial({
-            map: backFace.map, bumpMap: backFace.bump, bumpScale,
-            roughness: 0.82, metalness: 0.0
+            map: backFaceTex.map, normalMap: backFaceTex.normal, normalScale: NS,
+            roughness: 0.72, metalness: 0.0, envMapIntensity: 0.85
         });
         const rimMat = new THREE.MeshStandardMaterial({
-            color: PILL_COLOR, roughness: 0.85, metalness: 0.0
+            color: PILL_COLOR, roughness: 0.78, metalness: 0.0, envMapIntensity: 0.9
         });
 
-        // Pill = open cylinder rim + two textured disc caps.
+        /* ------------------------------------------------------------------ *
+         *  Geometry: flat caps + rounded (semicircular) rim
+         * ------------------------------------------------------------------ */
         const pill = new THREE.Group();
 
-        const rimMesh = new THREE.Mesh(
-            new THREE.CylinderGeometry(R, R, THICKNESS, 96, 1, true),
-            rimMat
-        );
-        rimMesh.rotation.x = Math.PI / 2;   // axis Y -> Z, so caps face the camera
+        // Rounded edge as a lathe: revolve a half-circle profile.
+        const profile = [];
+        const SEG = 24;
+        for (let i = 0; i <= SEG; i++) {
+            const a = Math.PI / 2 - Math.PI * (i / SEG);
+            profile.push(new THREE.Vector2(RFACE + BEVEL * Math.cos(a), BEVEL * Math.sin(a)));
+        }
+        const rimMesh = new THREE.Mesh(new THREE.LatheGeometry(profile, 128), rimMat);
+        rimMesh.rotation.x = Math.PI / 2;   // lathe axis Y -> Z, caps face camera
         pill.add(rimMesh);
 
-        const frontDisc = new THREE.Mesh(new THREE.CircleGeometry(R, 96), frontMat);
+        const frontDisc = new THREE.Mesh(new THREE.CircleGeometry(RFACE, 128), frontMat);
         frontDisc.position.z = THICKNESS / 2;
         pill.add(frontDisc);
 
-        const backDisc = new THREE.Mesh(new THREE.CircleGeometry(R, 96), backMat);
+        const backDisc = new THREE.Mesh(new THREE.CircleGeometry(RFACE, 128), backMat);
         backDisc.position.z = -THICKNESS / 2;
-        backDisc.rotation.y = Math.PI;      // face outward (-Z)
+        backDisc.rotation.y = Math.PI;
         pill.add(backDisc);
 
         scene.add(pill);
@@ -384,12 +410,10 @@
          *  Scroll-driven animation
          * ------------------------------------------------------------------ */
         const TWO_PI = Math.PI * 2;
-        let targetRot = 0;
-        let currentRot = 0;
-        let targetScale = 1;
-        let currentScale = 1;
+        let targetRot = 0, currentRot = 0;
+        let targetScale = 1, currentScale = 1;
         let camTargetY = 0, camCurY = 0;
-        let lastHalf = 0;
+        let lastHalf = 0, lastFrontIdx = 0;
 
         function scrollProgress() {
             const max = document.body.scrollHeight - window.innerHeight;
@@ -399,23 +423,24 @@
         function onScroll() {
             const p = scrollProgress();
             targetRot = p * TWO_PI * SPINS;
+            targetScale = 1 + 0.16 * Math.sin(p * Math.PI * SPINS) + p * 0.1;
+            camTargetY = Math.sin(p * Math.PI * 2) * 0.22;
 
-            // camera work: gentle dolly-in + a breathing zoom on the pill
-            targetScale = 1 + 0.18 * Math.sin(p * Math.PI * SPINS) + p * 0.12;
-            camTargetY = Math.sin(p * Math.PI * 2) * 0.25;
-
-            // Phrase swap: when the pill passes edge-on, if the FRONT (text) face
-            // is the one about to reappear, repaint it with the next phrase.
+            // Swap the front phrase while the pill is edge-on (text hidden).
             const half = Math.round(targetRot / Math.PI);
             if (half !== lastHalf) {
                 const facingFront = (((half % 2) + 2) % 2) === 0;
                 if (facingFront) {
-                    const idx = Math.floor(half / 2) % PHRASES.length;
-                    repaintText(frontFace, PHRASES[((idx % PHRASES.length) + PHRASES.length) % PHRASES.length]);
+                    const idx = ((Math.floor(half / 2) % PHRASES.length) + PHRASES.length) % PHRASES.length;
+                    if (idx !== lastFrontIdx) {
+                        frontMat.map = frontFaces[idx].map;
+                        frontMat.normalMap = frontFaces[idx].normal;
+                        frontMat.needsUpdate = true;
+                        lastFrontIdx = idx;
+                    }
                 }
                 lastHalf = half;
             }
-
             document.getElementById('scrollHint').style.opacity = p > 0.02 ? '0' : '0.75';
         }
         window.addEventListener('scroll', onScroll, { passive: true });
@@ -433,14 +458,12 @@
         const clock = new THREE.Clock();
         function tick() {
             const t = clock.getElapsedTime();
-
-            // smooth (eased) follow of scroll targets for a buttery feel
             currentRot   += (targetRot   - currentRot)   * 0.08;
             currentScale += (targetScale - currentScale) * 0.08;
             camCurY      += (camTargetY  - camCurY)      * 0.08;
 
             pill.rotation.y = currentRot;
-            pill.rotation.x = Math.sin(t * 0.6) * 0.06;   // subtle idle float
+            pill.rotation.x = Math.sin(t * 0.6) * 0.06;
             pill.position.y = Math.sin(t * 0.9) * 0.04;
             pill.scale.setScalar(currentScale);
 
@@ -453,8 +476,6 @@
 
         onScroll();
         tick();
-
-        // reveal
         requestAnimationFrame(() => {
             setTimeout(() => document.getElementById('loader').classList.add('hidden'), 250);
         });
