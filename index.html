@@ -175,6 +175,8 @@
         const SPINS      = 3;        // full rotations across the whole page
         const TEX        = 1024;     // texture resolution
         const NORMAL_STRENGTH = 2.4; // how hard grooves/grain bend the surface normal
+        const FLOOR_Y    = -1.3;     // contact line the coin stands on / topples over
+        const STAND_H    = R;        // coin centre height above that contact edge
 
         const PHRASES = [
             "Welcome to\nmy digital\nspace.",
@@ -508,12 +510,18 @@
         backDisc.rotation.y = Math.PI;
         pill.add(backDisc);
 
-        scene.add(pill);
+        // Pivot at the coin's bottom contact edge so it can topple over that edge
+        // (like a real coin), not spin about its own centre. The coin sits one
+        // radius above the pivot; rotating the pivot tips it flat onto the floor.
+        const pivot = new THREE.Group();
+        pivot.position.y = FLOOR_Y;
+        pill.position.y = STAND_H;
+        pivot.add(pill);
+        scene.add(pivot);
 
         /* ------------------------------------------------------------------ *
          *  Contact shadow (grounds the pill once it lies down)
          * ------------------------------------------------------------------ */
-        const FLOOR_Y = -1.4;
         const SETTLE_START = 0.62;   // last stretch of the page = "fall over & lie flat"
 
         function shadowTexture() {
@@ -534,7 +542,7 @@
                                           depthWrite: false, opacity: 0 })
         );
         shadow.rotation.x = -Math.PI / 2;
-        shadow.position.y = FLOOR_Y - 0.16;
+        shadow.position.y = FLOOR_Y - BEVEL - 0.01;
         scene.add(shadow);
 
         /* ------------------------------------------------------------------ *
@@ -563,11 +571,12 @@
             return max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
         }
 
-        // 2 full turns before the settle, +1 eased turn while toppling (ends front-up).
+        // 2 full turns before the settle, then finish one more turn early in the
+        // settle so the coin is standing still (front-up) before it topples over.
         function spinY(p) {
             const pre = Math.min(p, SETTLE_START) / SETTLE_START;
             const s = clamp01((p - SETTLE_START) / (1 - SETTLE_START));
-            return TWO_PI * (2 * pre + easeOutCubic(s));
+            return TWO_PI * (2 * pre + easeOutCubic(clamp01(s / 0.4)));
         }
 
         function setFront(idx) {
@@ -611,25 +620,42 @@
             curP += (targetP - curP) * 0.08;
             const p = curP;
             const s = clamp01((p - SETTLE_START) / (1 - SETTLE_START));
-            const ec = smooth(s);
-            const idle = 1 - s;
 
+            // The coin keeps flipping about its own centre until it has settled.
             pill.rotation.y = spinY(p);
-            const flop = -easeOutBack(s) * (Math.PI / 2);          // tip flat (face up) with a flop
-            const wob = Math.sin(s * Math.PI * 3.5) * idle * idle * 0.16;  // decaying rattle
-            pill.rotation.x = flop + wob * 0.6 + Math.sin(t * 0.6) * 0.06 * idle;
-            pill.rotation.z = wob * idle;
-            pill.position.y = Math.sin(t * 0.9) * 0.04 * idle + FLOOR_Y * easeOutBounce(s);
-            pill.scale.setScalar(1 + (0.16 * Math.sin(p * Math.PI * 3) + p * 0.1) * idle);
 
-            shadow.material.opacity = 0.65 * ec;
-            shadow.scale.setScalar(0.5 + 0.7 * easeOutBounce(s));
+            // Then it topples over its bottom edge (the pivot), gravity-accelerated,
+            // with a small slap-and-settle jiggle as the far edge hits the floor.
+            const topS = clamp01((s - 0.35) / 0.65);
+            let topple;
+            if (topS < 0.9) {
+                const u = topS / 0.9;
+                topple = u * u * (Math.PI / 2);                 // ease-in: starts slow, accelerates
+            } else {
+                const b = (topS - 0.9) / 0.1;
+                topple = Math.PI / 2 + Math.sin(b * Math.PI * 2) * 0.05 * (1 - b);
+            }
+            pivot.rotation.x = -topple;
+            pivot.rotation.z = Math.sin(topS * Math.PI * 4) * Math.pow(1 - topS, 2) * 0.04;
 
-            // camera cranes up and looks down at the resting pill
+            const ec = smooth(topS);
+            const idle = 1 - topS;
+            pill.rotation.x = Math.sin(t * 0.6) * 0.05 * idle;              // gentle upright bob
+            pill.position.y = STAND_H + Math.sin(t * 0.9) * 0.03 * idle;
+            pill.scale.setScalar(1 + (0.16 * Math.sin(p * Math.PI * 3) + p * 0.1) * (1 - smooth(s)));
+
+            // resting centre of the coin — aims the camera and places the shadow
+            const cy = FLOOR_Y + STAND_H * Math.cos(topple);
+            const cz = -STAND_H * Math.sin(topple);
+            shadow.position.z = cz;
+            shadow.material.opacity = 0.6 * ec;
+            shadow.scale.setScalar(0.5 + 0.7 * ec);
+
+            // camera cranes up and looks down at the toppling coin
             camera.position.x = 0;
-            camera.position.y = Math.sin(p * Math.PI * 2) * 0.22 * (1 - ec) + ec * 2.5;
-            camera.position.z = 5 - ec * 1.2;
-            camera.lookAt(0, ec * FLOOR_Y, 0);
+            camera.position.y = Math.sin(p * Math.PI * 2) * 0.22 * (1 - ec) + ec * 2.3;
+            camera.position.z = 5 - ec * 0.8;
+            camera.lookAt(0, ec * cy, ec * cz);
 
             renderer.render(scene, camera);
             requestAnimationFrame(tick);
