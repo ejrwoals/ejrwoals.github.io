@@ -151,9 +151,7 @@
             <h2>돌 때마다, 새로운 인사.</h2>
             <p class="lead">앞면이 다시 돌아올 때마다 글씨가 바뀝니다.</p>
         </section>
-        <section>
-            <h2>by chajjaem</h2>
-        </section>
+        <section></section>
     </main>
 
     <div class="scroll-hint" id="scrollHint">scroll</div>
@@ -458,8 +456,9 @@
 
         // Pre-build every face up front so phrase swaps are instant (no hitch).
         const frontFaces = PHRASES.map(p => buildFace(shapeText(p)));
+        const landingFace = buildFace(shapeText("by\nChajjaem"));  // held during the topple
         const backFaceTex = buildFace(shapeScore());
-        [...frontFaces, backFaceTex].forEach(f => {
+        [...frontFaces, landingFace, backFaceTex].forEach(f => {
             f.map.anisotropy = maxAniso;
             f.normal.anisotropy = maxAniso;
         });
@@ -577,26 +576,26 @@
             return TWO_PI * (2 * pre + easeOutCubic(clamp01(s / 0.3)));
         }
 
-        function setFront(idx) {
-            frontMat.map = frontFaces[idx].map;
-            frontMat.normalMap = frontFaces[idx].normal;
+        function applyFace(face, key) {
+            frontMat.map = face.map;
+            frontMat.normalMap = face.normal;
             frontMat.needsUpdate = true;
-            lastFrontIdx = idx;
+            lastFrontIdx = key;
         }
 
         function onScroll() {
             const p = scrollProgress();
             targetP = p;
             if (p < SETTLE_START) {
-                // cycle phrases while the pill is edge-on (text hidden)
+                // cycle the three words while the pill is edge-on (text hidden)
                 const half = Math.round(spinY(p) / Math.PI);
                 const facingFront = (((half % 2) + 2) % 2) === 0;
                 if (facingFront) {
                     const idx = ((Math.floor(half / 2) % PHRASES.length) + PHRASES.length) % PHRASES.length;
-                    if (idx !== lastFrontIdx) setFront(idx);
+                    if (idx !== lastFrontIdx) applyFace(frontFaces[idx], idx);
                 }
-            } else if (lastFrontIdx !== PHRASES.length - 1) {
-                setFront(PHRASES.length - 1);   // lock the closing message for the landing
+            } else if (lastFrontIdx !== 'land') {
+                applyFace(landingFace, 'land');   // "by Chajjaem" holds through the topple
             }
             document.getElementById('scrollHint').style.opacity = p > 0.02 ? '0' : '0.75';
         }
