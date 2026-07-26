@@ -239,10 +239,27 @@
             };
         }
 
+        // Stamp a shape into the height field as a centre-deep (U-section) groove.
+        function stampGradedGroove(ctx, drawWhite) {
+            const mask = newCanvas(), mx = mask.getContext('2d');
+            drawWhite(mx);                       // white shapes on transparent
+            const blur = newCanvas(), bx = blur.getContext('2d');
+            bx.filter = 'blur(6px)';             // soft walls; centres stay solid
+            bx.drawImage(mask, 0, 0);
+            bx.filter = 'none';
+            bx.globalCompositeOperation = 'source-in';
+            bx.fillStyle = '#000';               // recolor to black, keep alpha
+            bx.fillRect(0, 0, TEX, TEX);
+            ctx.save();
+            ctx.filter = 'none';
+            ctx.drawImage(blur, 0, 0);           // dark = deep, centre-weighted
+            ctx.restore();
+        }
+
         function shapeScore() {
             // A rounded vertical bar whose width is a fraction of the full groove.
             const bar = (ctx, wFrac) => {
-                const w = TEX * 0.055 * wFrac, x = TEX / 2 - w / 2;
+                const w = TEX * 0.036 * wFrac, x = TEX / 2 - w / 2;
                 const y = 0, h = TEX, r = w / 2;
                 ctx.beginPath();
                 ctx.moveTo(x + r, y);
@@ -256,21 +273,36 @@
                 ctx.closePath();
                 ctx.fill();
             };
+            // "J" and "M" imprint either side of the line. Drawn mirrored so they
+            // read correctly on the back disc (which is flipped 180° about Y).
+            const letters = (ctx, fill) => {
+                ctx.save();
+                ctx.translate(TEX, 0);
+                ctx.scale(-1, 1);                // pre-mirror -> correct on the back face
+                ctx.fillStyle = fill;
+                ctx.font = `800 ${TEX * 0.17}px Helvetica, Arial, sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('J', TEX * 0.30, TEX * 0.5);
+                ctx.fillText('M', TEX * 0.70, TEX * 0.5);
+                ctx.restore();
+            };
             return (ctx, mode) => {
                 if (mode === 'height') {
                     // Carve real depth: darkest (deepest) toward the centre, both
                     // along the length and across the width (a V/U cross-section).
-                    const top = 0, bot = TEX;
                     const grad = (a, b) => {
-                        const g = ctx.createLinearGradient(0, top, 0, bot);
+                        const g = ctx.createLinearGradient(0, 0, 0, TEX);
                         g.addColorStop(0.0, a); g.addColorStop(0.5, b); g.addColorStop(1.0, a);
                         return g;
                     };
                     ctx.fillStyle = grad('#5e5e5e', '#141414'); bar(ctx, 1.0);  // outer, shallow lip
                     ctx.fillStyle = grad('#343434', '#050505'); bar(ctx, 0.6);  // mid
                     ctx.fillStyle = grad('#1a1a1a', '#000000'); bar(ctx, 0.28); // deepest core
+                    stampGradedGroove(ctx, (c) => letters(c, '#fff'));          // J | M
                 } else {
-                    bar(ctx, 1.0);   // colour AO uses the caller's fill
+                    bar(ctx, 1.0);              // colour AO uses the caller's fill
+                    letters(ctx, ctx.fillStyle);
                 }
             };
         }
