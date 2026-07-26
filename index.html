@@ -586,16 +586,20 @@
         function onScroll() {
             const p = scrollProgress();
             targetP = p;
-            if (p < SETTLE_START) {
-                // cycle the three words while the pill is edge-on (text hidden)
-                const half = Math.round(spinY(p) / Math.PI);
-                const facingFront = (((half % 2) + 2) % 2) === 0;
-                if (facingFront) {
-                    const idx = ((Math.floor(half / 2) % PHRASES.length) + PHRASES.length) % PHRASES.length;
-                    if (idx !== lastFrontIdx) applyFace(frontFaces[idx], idx);
+
+            // Swap the imprint only while the pill is edge-on / showing its back
+            // (score side), so the change is hidden and the new text is already
+            // there when the front rotates back into view. The final front pass
+            // (after Ideas/Into/Reality) lands on "by Chajjaem" and holds.
+            const half = Math.round(spinY(p) / Math.PI);
+            const facingFront = (((half % 2) + 2) % 2) === 0;
+            if (facingFront) {
+                const front = Math.floor(half / 2);        // 0,1,2 while spinning; 3 = landing
+                if (front >= PHRASES.length) {
+                    if (lastFrontIdx !== 'land') applyFace(landingFace, 'land');
+                } else if (front !== lastFrontIdx) {
+                    applyFace(frontFaces[front], front);
                 }
-            } else if (lastFrontIdx !== 'land') {
-                applyFace(landingFace, 'land');   // "by Chajjaem" holds through the topple
             }
             document.getElementById('scrollHint').style.opacity = p > 0.02 ? '0' : '0.75';
         }
