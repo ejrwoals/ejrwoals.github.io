@@ -177,10 +177,9 @@
         const NORMAL_STRENGTH = 2.4; // how hard grooves/grain bend the surface normal
 
         const PHRASES = [
-            "chajjaem's\nHomepage",
-            "Nice to\nmeet you",
-            "Enjoy\nyour stay",
-            "Thanks for\nscrolling"
+            "Welcome to\nmy digital\nspace.",
+            "Discover\nthe apps\nI've crafted.",
+            "Let's build\nthe future\ntogether."
         ];
 
         /* ------------------------------------------------------------------ *
@@ -389,7 +388,7 @@
             const normal = toNormalTexture(hc);
             [map, normal].forEach(t => {
                 t.wrapS = t.wrapT = THREE.RepeatWrapping;
-                t.repeat.set(34, 2);   // match the rim's long, thin aspect so grain stays round
+                t.repeat.set(3, 0.3);   // density-matched to the faces so grain dots stay the same visible size
             });
             return { map, normal };
         }
