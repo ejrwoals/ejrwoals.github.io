@@ -511,39 +511,85 @@
         scene.add(pill);
 
         /* ------------------------------------------------------------------ *
-         *  Scroll-driven animation
+         *  Contact shadow (grounds the pill once it lies down)
+         * ------------------------------------------------------------------ */
+        const FLOOR_Y = -1.4;
+        const SETTLE_START = 0.62;   // last stretch of the page = "fall over & lie flat"
+
+        function shadowTexture() {
+            const c = newCanvas(), ctx = c.getContext('2d');
+            const g = ctx.createRadialGradient(TEX / 2, TEX / 2, 0, TEX / 2, TEX / 2, TEX / 2);
+            g.addColorStop(0.0, 'rgba(0,0,0,0.55)');
+            g.addColorStop(0.55, 'rgba(0,0,0,0.26)');
+            g.addColorStop(1.0, 'rgba(0,0,0,0)');
+            ctx.fillStyle = g;
+            ctx.fillRect(0, 0, TEX, TEX);
+            const t = new THREE.CanvasTexture(c);
+            t.colorSpace = THREE.SRGBColorSpace;
+            return t;
+        }
+        const shadow = new THREE.Mesh(
+            new THREE.PlaneGeometry(3.6, 3.6),
+            new THREE.MeshBasicMaterial({ map: shadowTexture(), transparent: true,
+                                          depthWrite: false, opacity: 0 })
+        );
+        shadow.rotation.x = -Math.PI / 2;
+        shadow.position.y = FLOOR_Y - 0.16;
+        scene.add(shadow);
+
+        /* ------------------------------------------------------------------ *
+         *  Scroll-driven animation (spin, then topple flat like a coin)
          * ------------------------------------------------------------------ */
         const TWO_PI = Math.PI * 2;
-        let targetRot = 0, currentRot = 0;
-        let targetScale = 1, currentScale = 1;
-        let camTargetY = 0, camCurY = 0;
-        let lastHalf = 0, lastFrontIdx = 0;
+        let targetP = 0, curP = 0, lastFrontIdx = 0;
+
+        const clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
+        const smooth = s => s * s * (3 - 2 * s);
+        const easeOutCubic = s => 1 - Math.pow(1 - s, 3);
+        const easeOutBack = s => {
+            const c1 = 1.70158, c3 = c1 + 1;
+            return 1 + c3 * Math.pow(s - 1, 3) + c1 * Math.pow(s - 1, 2);
+        };
+        function easeOutBounce(s) {
+            const n1 = 7.5625, d1 = 2.75;
+            if (s < 1 / d1) return n1 * s * s;
+            if (s < 2 / d1) return n1 * (s -= 1.5 / d1) * s + 0.75;
+            if (s < 2.5 / d1) return n1 * (s -= 2.25 / d1) * s + 0.9375;
+            return n1 * (s -= 2.625 / d1) * s + 0.984375;
+        }
 
         function scrollProgress() {
             const max = document.body.scrollHeight - window.innerHeight;
             return max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
         }
 
+        // 2 full turns before the settle, +1 eased turn while toppling (ends front-up).
+        function spinY(p) {
+            const pre = Math.min(p, SETTLE_START) / SETTLE_START;
+            const s = clamp01((p - SETTLE_START) / (1 - SETTLE_START));
+            return TWO_PI * (2 * pre + easeOutCubic(s));
+        }
+
+        function setFront(idx) {
+            frontMat.map = frontFaces[idx].map;
+            frontMat.normalMap = frontFaces[idx].normal;
+            frontMat.needsUpdate = true;
+            lastFrontIdx = idx;
+        }
+
         function onScroll() {
             const p = scrollProgress();
-            targetRot = p * TWO_PI * SPINS;
-            targetScale = 1 + 0.16 * Math.sin(p * Math.PI * SPINS) + p * 0.1;
-            camTargetY = Math.sin(p * Math.PI * 2) * 0.22;
-
-            // Swap the front phrase while the pill is edge-on (text hidden).
-            const half = Math.round(targetRot / Math.PI);
-            if (half !== lastHalf) {
+            targetP = p;
+            if (p < SETTLE_START) {
+                // cycle phrases while the pill is edge-on (text hidden)
+                const half = Math.round(spinY(p) / Math.PI);
                 const facingFront = (((half % 2) + 2) % 2) === 0;
                 if (facingFront) {
                     const idx = ((Math.floor(half / 2) % PHRASES.length) + PHRASES.length) % PHRASES.length;
-                    if (idx !== lastFrontIdx) {
-                        frontMat.map = frontFaces[idx].map;
-                        frontMat.normalMap = frontFaces[idx].normal;
-                        frontMat.needsUpdate = true;
-                        lastFrontIdx = idx;
-                    }
+                    if (idx !== lastFrontIdx) setFront(idx);
                 }
-                lastHalf = half;
+            } else if (lastFrontIdx !== PHRASES.length - 1) {
+                setFront(PHRASES.length - 1);   // lock the closing message for the landing
             }
             document.getElementById('scrollHint').style.opacity = p > 0.02 ? '0' : '0.75';
         }
@@ -562,17 +608,28 @@
         const clock = new THREE.Clock();
         function tick() {
             const t = clock.getElapsedTime();
-            currentRot   += (targetRot   - currentRot)   * 0.08;
-            currentScale += (targetScale - currentScale) * 0.08;
-            camCurY      += (camTargetY  - camCurY)      * 0.08;
+            curP += (targetP - curP) * 0.08;
+            const p = curP;
+            const s = clamp01((p - SETTLE_START) / (1 - SETTLE_START));
+            const ec = smooth(s);
+            const idle = 1 - s;
 
-            pill.rotation.y = currentRot;
-            pill.rotation.x = Math.sin(t * 0.6) * 0.06;
-            pill.position.y = Math.sin(t * 0.9) * 0.04;
-            pill.scale.setScalar(currentScale);
+            pill.rotation.y = spinY(p);
+            const flop = -easeOutBack(s) * (Math.PI / 2);          // tip flat (face up) with a flop
+            const wob = Math.sin(s * Math.PI * 3.5) * idle * idle * 0.16;  // decaying rattle
+            pill.rotation.x = flop + wob * 0.6 + Math.sin(t * 0.6) * 0.06 * idle;
+            pill.rotation.z = wob * idle;
+            pill.position.y = Math.sin(t * 0.9) * 0.04 * idle + FLOOR_Y * easeOutBounce(s);
+            pill.scale.setScalar(1 + (0.16 * Math.sin(p * Math.PI * 3) + p * 0.1) * idle);
 
-            camera.position.y = camCurY;
-            camera.lookAt(0, 0, 0);
+            shadow.material.opacity = 0.65 * ec;
+            shadow.scale.setScalar(0.5 + 0.7 * easeOutBounce(s));
+
+            // camera cranes up and looks down at the resting pill
+            camera.position.x = 0;
+            camera.position.y = Math.sin(p * Math.PI * 2) * 0.22 * (1 - ec) + ec * 2.5;
+            camera.position.z = 5 - ec * 1.2;
+            camera.lookAt(0, ec * FLOOR_Y, 0);
 
             renderer.render(scene, camera);
             requestAnimationFrame(tick);
