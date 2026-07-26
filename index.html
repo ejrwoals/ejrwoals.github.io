@@ -244,7 +244,7 @@
             // A rounded vertical bar whose width is a fraction of the full groove.
             const bar = (ctx, wFrac) => {
                 const w = TEX * 0.055 * wFrac, x = TEX / 2 - w / 2;
-                const y = TEX * 0.05, h = TEX * 0.90, r = w / 2;
+                const y = 0, h = TEX, r = w / 2;
                 ctx.beginPath();
                 ctx.moveTo(x + r, y);
                 ctx.arcTo(x + w, y, x + w, y + r, r);
@@ -261,7 +261,7 @@
                 if (mode === 'height') {
                     // Carve real depth: darkest (deepest) toward the centre, both
                     // along the length and across the width (a V/U cross-section).
-                    const top = TEX * 0.05, bot = TEX * 0.95;
+                    const top = 0, bot = TEX;
                     const grad = (a, b) => {
                         const g = ctx.createLinearGradient(0, top, 0, bot);
                         g.addColorStop(0.0, a); g.addColorStop(0.5, b); g.addColorStop(1.0, a);
@@ -370,7 +370,7 @@
         // Tiling grain (no grooves) for the rounded edge, so the rim shares the
         // same matte tooth as the faces instead of being a flat solid colour.
         function buildGrain() {
-            const grain = speckle(22000);
+            const grain = speckle(30000);
             const cc = newCanvas(), cx = cc.getContext('2d');
             cx.fillStyle = `#${PILL_COLOR.getHexString()}`;
             cx.fillRect(0, 0, TEX, TEX);
@@ -378,9 +378,9 @@
             hx.fillStyle = '#8c8c8c';
             hx.fillRect(0, 0, TEX, TEX);
             for (const [x, y, s, d] of grain) {
-                cx.fillStyle = d < 0 ? 'rgba(120,52,30,0.06)' : 'rgba(255,222,196,0.06)';
+                cx.fillStyle = d < 0 ? 'rgba(120,52,30,0.11)' : 'rgba(255,222,196,0.11)';
                 cx.fillRect(x, y, s, s);
-                const v = 140 + d * 60;
+                const v = 140 + d * 95;
                 hx.fillStyle = `rgb(${v},${v},${v})`;
                 hx.fillRect(x, y, s, s);
             }
@@ -389,7 +389,7 @@
             const normal = toNormalTexture(hc);
             [map, normal].forEach(t => {
                 t.wrapS = t.wrapT = THREE.RepeatWrapping;
-                t.repeat.set(9, 2);
+                t.repeat.set(13, 3);
             });
             return { map, normal };
         }
@@ -447,7 +447,7 @@
         rimGrain.normal.anisotropy = maxAniso;
         const rimMat = new THREE.MeshStandardMaterial({
             map: rimGrain.map, normalMap: rimGrain.normal,
-            normalScale: new THREE.Vector2(0.5, 0.5),
+            normalScale: new THREE.Vector2(1.3, 1.3),
             roughness: 0.8, metalness: 0.0, envMapIntensity: 0.9,
             side: THREE.DoubleSide   // keep the edge opaque from every angle
         });
