@@ -166,8 +166,8 @@
         const PILL_COLOR = new THREE.Color('#e88a63');  // salmon/orange body
         const R          = 0.936;    // outer radius (smaller so it isn't so screen-filling)
         const THICKNESS  = 0.230;    // pill thickness (kept proportional to R)
-        const BEVEL      = THICKNESS / 2;         // semicircular edge radius
-        const RFACE      = R - BEVEL;             // flat-face radius
+        const CHAMFER    = 0.05;                  // small angled edge (not a full round) like a real tablet
+        const RFACE      = R - CHAMFER;           // flat-face radius
         const SPINS      = 3;        // full rotations across the whole page
         const TEX        = 1024;     // texture resolution
         const NORMAL_STRENGTH = 2.4; // how hard grooves/grain bend the surface normal
@@ -487,13 +487,15 @@
          * ------------------------------------------------------------------ */
         const pill = new THREE.Group();
 
-        // Rounded edge as a lathe: revolve a half-circle profile.
-        const profile = [];
-        const SEG = 24;
-        for (let i = 0; i <= SEG; i++) {
-            const a = Math.PI / 2 - Math.PI * (i / SEG);
-            profile.push(new THREE.Vector2(RFACE + BEVEL * Math.cos(a), BEVEL * Math.sin(a)));
-        }
+        // Angular tablet edge: a short chamfer off each flat face into a straight
+        // cylindrical wall, so the face/edge boundary is a defined corner, not a
+        // smooth dome. The separate flat-face discs meet the chamfer at a crease.
+        const profile = [
+            new THREE.Vector2(RFACE, THICKNESS / 2),
+            new THREE.Vector2(R,     THICKNESS / 2 - CHAMFER),
+            new THREE.Vector2(R,    -THICKNESS / 2 + CHAMFER),
+            new THREE.Vector2(RFACE, -THICKNESS / 2)
+        ];
         const rimMesh = new THREE.Mesh(new THREE.LatheGeometry(profile, 128), rimMat);
         rimMesh.rotation.x = Math.PI / 2;   // lathe axis Y -> Z, caps face camera
         pill.add(rimMesh);
@@ -539,7 +541,7 @@
                                           depthWrite: false, opacity: 0 })
         );
         shadow.rotation.x = -Math.PI / 2;
-        shadow.position.y = FLOOR_Y - BEVEL - 0.01;
+        shadow.position.y = FLOOR_Y - THICKNESS / 2 - 0.01;
         scene.add(shadow);
 
         /* ------------------------------------------------------------------ *
