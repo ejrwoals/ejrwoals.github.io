@@ -510,14 +510,14 @@
         backDisc.rotation.y = Math.PI;
         pill.add(backDisc);
 
-        // Pivot at the coin's bottom contact edge so it can topple over that edge
-        // (like a real coin), not spin about its own centre. The coin sits one
-        // radius above the pivot; rotating the pivot tips it flat onto the floor.
-        const pivot = new THREE.Group();
-        pivot.position.y = FLOOR_Y;
-        pill.position.y = STAND_H;
-        pivot.add(pill);
-        scene.add(pivot);
+        // Nested rig for a spinning-coin (Euler's-disk) settle: the pill leans
+        // over (tilt group) while the whole thing precesses about the vertical
+        // axis (precess group), so it spirals down and flattens onto the floor.
+        const tilt = new THREE.Group();
+        tilt.add(pill);
+        const precess = new THREE.Group();
+        precess.add(tilt);
+        scene.add(precess);
 
         /* ------------------------------------------------------------------ *
          *  Contact shadow (grounds the pill once it lies down)
@@ -576,7 +576,7 @@
         function spinY(p) {
             const pre = Math.min(p, SETTLE_START) / SETTLE_START;
             const s = clamp01((p - SETTLE_START) / (1 - SETTLE_START));
-            return TWO_PI * (2 * pre + easeOutCubic(clamp01(s / 0.4)));
+            return TWO_PI * (2 * pre + easeOutCubic(clamp01(s / 0.3)));
         }
 
         function setFront(idx) {
@@ -621,41 +621,37 @@
             const p = curP;
             const s = clamp01((p - SETTLE_START) / (1 - SETTLE_START));
 
-            // The coin keeps flipping about its own centre until it has settled.
+            // Finish the flip so the face points forward, then hold it.
             pill.rotation.y = spinY(p);
 
-            // Then it topples over its bottom edge (the pivot), gravity-accelerated,
-            // with a small slap-and-settle jiggle as the far edge hits the floor.
-            const topS = clamp01((s - 0.35) / 0.65);
-            let topple;
+            // ---- spinning-coin settle: lean + precession spiral ----
+            const topS = clamp01((s - 0.15) / 0.85);
+            let lean;
             if (topS < 0.9) {
                 const u = topS / 0.9;
-                topple = u * u * (Math.PI / 2);                 // ease-in: starts slow, accelerates
+                lean = u * u * (Math.PI / 2);                   // gravity ease-in tilt 0 -> 90
             } else {
                 const b = (topS - 0.9) / 0.1;
-                topple = Math.PI / 2 + Math.sin(b * Math.PI * 2) * 0.05 * (1 - b);
+                lean = Math.PI / 2 + Math.sin(b * Math.PI * 2) * 0.04 * (1 - b);  // slap-settle
             }
-            pivot.rotation.x = -topple;
-            pivot.rotation.z = Math.sin(topS * Math.PI * 4) * Math.pow(1 - topS, 2) * 0.04;
+            tilt.rotation.x = -lean;
+            precess.rotation.y = TWO_PI * 3 * smooth(topS);     // ~3 whirls: accelerate, then settle
+            precess.position.y = FLOOR_Y + R * Math.cos(lean);  // centre lowers as it flattens
 
             const ec = smooth(topS);
             const idle = 1 - topS;
-            pill.rotation.x = Math.sin(t * 0.6) * 0.05 * idle;              // gentle upright bob
-            pill.position.y = STAND_H + Math.sin(t * 0.9) * 0.03 * idle;
+            pill.rotation.x = Math.sin(t * 0.6) * 0.05 * idle;  // gentle upright bob (pre-settle)
+            pill.position.y = Math.sin(t * 0.9) * 0.03 * idle;
             pill.scale.setScalar(1 + (0.16 * Math.sin(p * Math.PI * 3) + p * 0.1) * (1 - smooth(s)));
 
-            // resting centre of the coin — aims the camera and places the shadow
-            const cy = FLOOR_Y + STAND_H * Math.cos(topple);
-            const cz = -STAND_H * Math.sin(topple);
-            shadow.position.z = cz;
             shadow.material.opacity = 0.6 * ec;
             shadow.scale.setScalar(0.5 + 0.7 * ec);
 
-            // camera cranes up and looks down at the toppling coin
+            // camera cranes up and looks down at the spiralling coin
             camera.position.x = 0;
-            camera.position.y = Math.sin(p * Math.PI * 2) * 0.22 * (1 - ec) + ec * 2.3;
-            camera.position.z = 5 - ec * 0.8;
-            camera.lookAt(0, ec * cy, ec * cz);
+            camera.position.y = Math.sin(p * Math.PI * 2) * 0.22 * (1 - ec) + ec * 2.2;
+            camera.position.z = 5 - ec * 0.9;
+            camera.lookAt(0, ec * precess.position.y, 0);
 
             renderer.render(scene, camera);
             requestAnimationFrame(tick);
