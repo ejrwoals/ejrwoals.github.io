@@ -205,7 +205,7 @@
 
         // Lay the text out on a context and return a draw(ctx) for it.
         function layoutText(ctx, lines) {
-            const px = fitFont(ctx, lines, TEX * 0.62, 190);
+            const px = fitFont(ctx, lines, TEX * 0.80, 280);
             ctx.font = `800 ${px}px Helvetica, Arial, sans-serif`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
@@ -244,7 +244,7 @@
             // A rounded vertical bar whose width is a fraction of the full groove.
             const bar = (ctx, wFrac) => {
                 const w = TEX * 0.055 * wFrac, x = TEX / 2 - w / 2;
-                const y = TEX * 0.10, h = TEX * 0.80, r = w / 2;
+                const y = TEX * 0.05, h = TEX * 0.90, r = w / 2;
                 ctx.beginPath();
                 ctx.moveTo(x + r, y);
                 ctx.arcTo(x + w, y, x + w, y + r, r);
@@ -261,7 +261,7 @@
                 if (mode === 'height') {
                     // Carve real depth: darkest (deepest) toward the centre, both
                     // along the length and across the width (a V/U cross-section).
-                    const top = TEX * 0.10, bot = TEX * 0.90;
+                    const top = TEX * 0.05, bot = TEX * 0.95;
                     const grad = (a, b) => {
                         const g = ctx.createLinearGradient(0, top, 0, bot);
                         g.addColorStop(0.0, a); g.addColorStop(0.5, b); g.addColorStop(1.0, a);
