@@ -369,7 +369,7 @@
         // Tiling grain (no grooves) for the rounded edge, so the rim shares the
         // same matte tooth as the faces instead of being a flat solid colour.
         function buildGrain() {
-            const grain = speckle(30000);
+            const grain = speckle(11000);   // sparser than the faces so the edge isn't "furry"
             const cc = newCanvas(), cx = cc.getContext('2d');
             cx.fillStyle = `#${PILL_COLOR.getHexString()}`;
             cx.fillRect(0, 0, TEX, TEX);
@@ -377,9 +377,9 @@
             hx.fillStyle = '#8c8c8c';
             hx.fillRect(0, 0, TEX, TEX);
             for (const [x, y, s, d] of grain) {
-                cx.fillStyle = d < 0 ? 'rgba(120,52,30,0.14)' : 'rgba(255,222,196,0.14)';
+                cx.fillStyle = d < 0 ? 'rgba(120,52,30,0.10)' : 'rgba(255,222,196,0.10)';
                 cx.fillRect(x, y, s, s);
-                const v = 140 + d * 115;
+                const v = 140 + d * 80;
                 hx.fillStyle = `rgb(${v},${v},${v})`;
                 hx.fillRect(x, y, s, s);
             }
@@ -446,7 +446,7 @@
         rimGrain.normal.anisotropy = maxAniso;
         const rimMat = new THREE.MeshStandardMaterial({
             map: rimGrain.map, normalMap: rimGrain.normal,
-            normalScale: new THREE.Vector2(1.7, 1.7),
+            normalScale: new THREE.Vector2(1.05, 1.05),
             roughness: 0.94, metalness: 0.0, envMapIntensity: 0.45,
             side: THREE.DoubleSide   // keep the edge opaque from every angle
         });
