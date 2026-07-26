@@ -276,11 +276,11 @@
             // "J" and "M" imprint either side of the line. Drawn mirrored so they
             // read correctly on the back disc (which is flipped 180° about Y).
             const letters = (ctx, fill) => {
+                // The pill's own 180° spin cancels the back disc's 180°, so the
+                // texture is NOT mirrored when the back faces the camera — draw normally.
                 ctx.save();
-                ctx.translate(TEX, 0);
-                ctx.scale(-1, 1);                // pre-mirror -> correct on the back face
                 ctx.fillStyle = fill;
-                ctx.font = `800 ${TEX * 0.17}px Helvetica, Arial, sans-serif`;
+                ctx.font = `800 ${TEX * 0.24}px Helvetica, Arial, sans-serif`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText('J', TEX * 0.30, TEX * 0.5);
