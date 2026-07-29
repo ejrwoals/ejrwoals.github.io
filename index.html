@@ -521,7 +521,8 @@
         /* ------------------------------------------------------------------ *
          *  Contact shadow (grounds the pill once it lies down)
          * ------------------------------------------------------------------ */
-        const SETTLE_START = 0.62;   // last stretch of the page = "fall over & lie flat"
+        const SPIN_END     = 0.70;   // the spin finishes (coin front-up, "by Chajjaem") here
+        const TOPPLE_START = 0.70;   // then it topples & lies flat over the rest of the page
 
         function shadowTexture() {
             const c = newCanvas(), ctx = c.getContext('2d');
@@ -552,6 +553,7 @@
 
         const clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
         const smooth = s => s * s * (3 - 2 * s);
+        const smootherstep = s => s * s * s * (s * (s * 6 - 15) + 10);  // 0 velocity at both ends
         const easeOutCubic = s => 1 - Math.pow(1 - s, 3);
         const easeOutBack = s => {
             const c1 = 1.70158, c3 = c1 + 1;
@@ -570,12 +572,12 @@
             return max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
         }
 
-        // 2 full turns before the settle, then finish one more turn early in the
-        // settle so the coin is standing still (front-up) before it topples over.
+        // One smooth 3-turn spin over the whole run with no velocity jump, and
+        // slowest near the ends — so Reality (the last word before the credit)
+        // gets fair screen time instead of being whipped away by a sudden
+        // speed-up. It reaches "by Chajjaem" front-up right as the topple starts.
         function spinY(p) {
-            const pre = Math.min(p, SETTLE_START) / SETTLE_START;
-            const s = clamp01((p - SETTLE_START) / (1 - SETTLE_START));
-            return TWO_PI * (2 * pre + easeOutCubic(clamp01(s / 0.3)));
+            return TWO_PI * 3 * smootherstep(clamp01(p / SPIN_END));
         }
 
         function applyFace(face, key) {
@@ -622,30 +624,29 @@
             const t = clock.getElapsedTime();
             curP += (targetP - curP) * 0.08;
             const p = curP;
-            const s = clamp01((p - SETTLE_START) / (1 - SETTLE_START));
 
-            // Finish the flip so the face points forward, then hold it.
+            // Smooth flip (drives the phrase cycling); holds once the spin is done.
             pill.rotation.y = spinY(p);
 
-            // ---- spinning-coin settle: lean + precession spiral ----
-            const topS = clamp01((s - 0.15) / 0.85);
+            // ---- spinning-coin settle: lean + precession spiral, after the spin ----
+            const settle = clamp01((p - TOPPLE_START) / (1 - TOPPLE_START));
             let lean;
-            if (topS < 0.9) {
-                const u = topS / 0.9;
+            if (settle < 0.9) {
+                const u = settle / 0.9;
                 lean = u * u * (Math.PI / 2);                   // gravity ease-in tilt 0 -> 90
             } else {
-                const b = (topS - 0.9) / 0.1;
+                const b = (settle - 0.9) / 0.1;
                 lean = Math.PI / 2 + Math.sin(b * Math.PI * 2) * 0.04 * (1 - b);  // slap-settle
             }
             tilt.rotation.x = -lean;
-            precess.rotation.y = TWO_PI * 3 * smooth(topS);     // ~3 whirls: accelerate, then settle
+            precess.rotation.y = TWO_PI * 3 * smooth(settle);   // ~3 whirls: accelerate, then settle
             precess.position.y = FLOOR_Y + R * Math.cos(lean);  // centre lowers as it flattens
 
-            const ec = smooth(topS);
-            const idle = 1 - topS;
+            const ec = smooth(settle);
+            const idle = 1 - settle;
             pill.rotation.x = Math.sin(t * 0.6) * 0.05 * idle;  // gentle upright bob (pre-settle)
             pill.position.y = Math.sin(t * 0.9) * 0.03 * idle;
-            pill.scale.setScalar(1 + (0.16 * Math.sin(p * Math.PI * 3) + p * 0.1) * (1 - smooth(s)));
+            pill.scale.setScalar(1 + (0.16 * Math.sin(p * Math.PI * 3) + p * 0.1) * (1 - ec));
 
             shadow.material.opacity = 0.6 * ec;
             shadow.scale.setScalar(0.5 + 0.7 * ec);
